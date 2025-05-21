@@ -1,0 +1,911 @@
+---
+title: "Early life effects on health in OA"
+output: html_document
+date: "2025-05-21"
+---
+
+```{r}
+library(tidyverse)
+library(factoextra)
+library(FactoMineR)
+library(exactextractr)
+library(geosphere)
+library(mice)
+library(psych)
+library(ggplot2)
+library(ggpubr)
+library(ggmap)
+library(ggrepel)
+library(dplyr)
+library(data.table)
+library(ggforce)
+library(scales)
+library(preprocessCore)
+library(nlWaldTest)
+library(nationalparkcolors)
+pal <- park_palette("Badlands")
+```
+
+
+```{r}
+OA_data<- readRDS("/Users/rachelpetersen/Library/CloudStorage/GoogleDrive-rpetersen42@gmail.com/Other computers/My MacBook Pro (1)/Lea Lab/OA_health/OA_health/OA_health_data.rds")
+```
+
+
+## Generate early life PC scores
+
+```{r}
+# Variable Groups
+parent_occupation <-   c("early_father_occupation___crop",
+                         "early_father_occupation___subsist_crop",
+                         "early_father_occupation___forage",
+                         "early_father_occupation___wage",
+                         "early_mother_occupation___crop",
+                         "early_mother_occupation___subsist_crop",
+                         "early_mother_occupation___forage",
+                         "early_mother_occupation___wage")
+
+hh_item <- c( "early_hh_item___moto",
+              "early_hh_item___bicycle",
+              "early_hh_item___generator",
+              "early_hh_item___blowpipe",
+              "early_hh_item___machete",
+              "early_hh_item___flip_phone",
+              "early_hh_item___smart_phone",
+              "early_hh_item___chainsaw",
+              "early_hh_item___weedwacker",
+              "early_hh_item___car",
+              "early_hh_item___tv",
+              "early_hh_item___gas_stove")
+
+diet <- c("early_store",
+          "early_oil_sugar",
+          "early_wild_meat")
+
+early_misc <- c("early_school",
+                "birth_place_hosp",
+                "early_vill_access_road",
+                "early_clean_water"  )
+
+housing <- c( "early_house_type___traditional",
+               "early_house_type___stone",
+               "early_house_type___wood")
+
+
+# List of variables to check for completeness
+variables_to_check <- c(parent_occupation, diet, housing, early_misc, hh_item)
+
+# how many variables are missing for a given person
+x<-(apply( OA_data[,variables_to_check] ,1,function(x) length(which(is.na(x))) ))
+table(x)
+
+# Remove observations with missing data for variables_to_check (allow 1 missing data point)
+OA_data_complete <- OA_data[which(x<2), variables_to_check]
+
+#Impute missing data
+OA_data_complete_imputed <- complete(mice(OA_data_complete, method ="lasso.norm"))
+
+# Perform PCA
+pca_result <- prcomp(OA_data_complete_imputed, center = TRUE, scale. = TRUE)
+
+#Extract skree plot 
+s <- summary(pca_result)
+dat <- data.frame(
+  component = factor(1:length(s$sdev), labels=paste0("PC", 1:length(s$sdev))),
+  var_explained = s$sdev^2/sum(s$sdev^2)
+)
+skree_plot<-ggplot(dat[1:10,], aes(y=var_explained)) + 
+  geom_line(aes(x=component, group=1)) + 
+  geom_point(aes(x=component)) + 
+  theme_bw(13) + 
+  theme(axis.text.x=element_text(angle=45, hjust=1, vjust=1))+
+  ylab('Percent variance explained');skree_plot
+
+# Extract the PC scores
+OA_data$Early_urban_PC1<-NA
+OA_data$Early_urban_PC1[which(x<2)]<-pca_result$x[,1]
+OA_data$Early_urban_PC2<-NA
+OA_data$Early_urban_PC2[which(x<2)]<-pca_result$x[,2]
+```
+
+### Make the barplot of loadings for PC1
+```{r} 
+# Extract PC1 loadings
+loadings_df <- as.data.frame(pca_result$rotation[,1])
+
+names(loadings_df)<-'loadings'
+loadings_df$variable<-rownames(loadings_df)
+loadings_df$group<-NA
+loadings_df$group[which(loadings_df$variable %in% diet)]<-'diet'
+loadings_df$group[which(loadings_df$variable %in% parent_occupation)]<-'parent occupation'
+loadings_df$group[which(loadings_df$variable %in% early_misc)]<-'misc'
+loadings_df$group[which(loadings_df$variable %in% hh_item)]<-'household items'
+loadings_df$group[which(loadings_df$variable %in% housing)]<-'housing'
+
+# Mapping for cleaner labels
+clean_labels <- c(
+  "early_father_occupation___crop" = "Father Crop",
+  "early_father_occupation___subsist_crop" = "Father Subsistence Crop",
+  "early_father_occupation___forage" = "Father Forage",
+  "early_father_occupation___wage" = "Father Wage",
+  "early_mother_occupation___crop" = "Mother Crop",
+  "early_mother_occupation___subsist_crop" = "Mother Subsistence Crop",
+  "early_mother_occupation___forage" = "Mother Forage",
+  "early_mother_occupation___wage" = "Mother Wage",
+  "early_hh_item___moto" = "Motorcycle",
+  "early_hh_item___bicycle" = "Bicycle",
+  "early_hh_item___generator" = "Generator",
+  "early_hh_item___blowpipe" = "Blowpipe",
+  "early_hh_item___machete" = "Machete",
+  "early_hh_item___flip_phone" = "Flip Phone",
+  "early_hh_item___smart_phone" = "Smart Phone",
+  "early_hh_item___chainsaw" = "Chainsaw",
+  "early_hh_item___weedwacker" = "Weedwacker",
+  "early_hh_item___car" = "Car",
+  "early_hh_item___tv" = "TV",
+  "early_hh_item___gas_stove" = "Gas Stove",
+  "early_house_type___traditional" = "Traditional House",
+  "early_house_type___stone" = "Stone House",
+  "early_house_type___wood" = "Wood House",
+  "early_store" = "Store Bought Food",
+  "early_oil_sugar" = "Oil & Sugar Use",
+  "early_wild_meat" = "Wild Meat Consumption",
+  "early_school" = "Nearby School",
+  "highest_education_stage" = "Highest Education",
+  "birth_place_hosp" = "Born in Hospital",
+  "early_vill_access_road"= "Village accessible by road",
+  "early_clean_water" = "Natural water source"
+)
+
+# Convert to dataframe for plotting
+loadings_df <- loadings_df %>%
+  mutate(variable = recode(variable, !!!clean_labels))
+
+traditional_variables<-c("Traditional House", "Machete", "Blowpipe", "Wild Meat Consumption", "Mother Forage", "Father Forage", "Mother Crop", "Father Crop", "Mother Subsistence Crop", "Father Subsistence Crop", "Natural water source")
+loadings_df$traditional_group<- ifelse(loadings_df$variable %in% traditional_variables, "Traditional", "Urban")
+
+# Create a grouped variable
+loadings_df <- loadings_df %>%
+  mutate(grouped_x = interaction(variable, group))
+
+# Order by value within each category
+loadings_df <- loadings_df %>%
+  arrange(group, desc(loadings)) %>%  # Sort within each category
+  mutate(grouped_x = factor(grouped_x, levels = unique(grouped_x)))  
+
+#Rename the variable groups
+loadings_df$group<-factor(loadings_df$group, levels=c("diet", "household items", "housing", "misc", "parent occupation"), labels=c("diet", "household items", "housing", "community attributes", "parent livelihood"))
+
+PC1_bar<-ggplot(loadings_df, aes(x = grouped_x, y = loadings, fill = group, alpha=traditional_group)) +
+  geom_bar(stat = "identity", color="black") +
+  coord_flip() +
+  labs(title = "PC1 Loadings", x = "Early life variables", y = "Loading", fill="Variable Groups") +
+  theme_minimal() +
+     guides(alpha = "none") + 
+  scale_alpha_manual(values= c(0.5, 1)) +
+  scale_x_discrete(labels = function(x) sub("\\..*", "", x)) +
+  theme(plot.title=element_text(hjust=0.5), plot.subtitle=element_text( hjust=0.5), legend.position="right") +
+  scale_fill_manual(values=c(pal[1], "grey", pal[2], pal[3], pal[4]))+
+  guides(fill = guide_legend(reverse = TRUE)); PC1_bar
+```
+
+#boxplot of PC1 by village
+```{r}
+OA_data$village_id<-as.factor(OA_data$village_id)
+OA_data_plot<-OA_data %>%
+  filter(!is.na(village_id)) %>%
+  filter(!is.na(Early_urban_PC1)) %>%
+  group_by(village_id) %>%
+  mutate(mean_PC1= mean(Early_urban_PC1, na.rm=T)) %>%
+  ungroup()
+
+PC1_by_village<-ggplot(OA_data_plot, aes(x=reorder(village_id, -mean_PC1), y=Early_urban_PC1)) +
+  theme_bw() +
+  geom_hline(yintercept=0, linetype="dashed")+
+  geom_boxplot(outlier.size=1) +
+  ylab("Early life urbanicity: PC1") +
+  xlab("Village ID"); PC1_by_village
+```
+
+### standardize variables
+```{r} 
+# recode sex
+OA_data_std <- OA_data %>%
+  mutate(sex = as.character(sex)) %>%
+  mutate(sex = case_when(
+    sex == "1" ~ "Male",
+    sex == "0" ~ "Female",
+    TRUE ~ sex  # This keeps any existing character values
+  ))
+
+Body_Height <- c("height_standing", "height_hip", "height_knee")
+
+Body_Press <- c("waist_circum", "weight", "BMI", "BRI", "body_fat", 
+                "waist_hip","sys_bp2", "dias_bp2")
+
+Blood_Bio <- c("total_chol", "ldl", "hdl",  "triglyc")
+Binary<-c('obese','hypertension')
+
+standardize <- function(x) {
+  return((x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE))
+}
+OA_merged_std <- OA_data_std %>%
+  mutate(across(all_of(c("age","urb_score",Body_Height, Body_Press, Blood_Bio)), 
+                .fns = ~ standardize(.x), 
+                .names = "{.col}_std"))
+OA_merged<-subset(OA_merged_std,age>17)
+OA_merged$Early_PC1_std<- scale(OA_merged$Early_urban_PC1)
+
+# sanity check the cleaned variables (before standardization)
+tmp<-OA_merged[,c(Body_Height,Body_Press,Blood_Bio,'rid','sex')] %>%
+  pivot_longer(!rid & !sex, names_to = "outcome", values_to = "value")
+
+tmp$outcome <- recode(tmp$outcome,
+  height_standing = "Standing height",
+  height_hip = "Hip height",
+  height_knee = "Knee height",
+  waist_circum = "Waist circumference",
+  weight = "Body weight",
+  BMI = "BMI",
+  BRI = "BRI",
+  body_fat = "Body fat percentage",
+  waist_hip = "Waist to hip ratio",
+  sys_bp2 = "Systolic BP",
+  dias_bp2 = "Diastolic BP",
+  total_chol = "Total cholesterol",
+  ldl = "LDL",
+  hdl = "HDL",
+  triglyc = "Triglycerides"
+)
+
+tmp$outcome <- factor(tmp$outcome, levels = c("Standing height","Hip height","Knee height","Waist circumference","Body weight","BMI","BRI","Body fat percentage","Waist to hip ratio","Systolic BP","Diastolic BP","Total cholesterol","LDL","HDL","Triglycerides"))
+
+MvF_density<-ggplot(tmp, aes(x=value,fill=sex)) + geom_density(alpha=0.5)+ facet_wrap(~outcome,scales='free')+ theme(legend.position="bottom") +
+  theme_bw() +
+  xlab("Biomarker value");MvF_density
+```
+
+
+### Make some maps - current sampling locations and current urbanicity
+```{r} 
+# Prep the map
+medianlat <- median(OA_merged$lat, na.rm = TRUE)
+medianlong <- median(OA_merged$long, na.rm = TRUE)
+
+register_google('AIzaSyBqRWaHZTtsvaSOIwDdHjmTVPD-cXvaKrE')
+s <- "element:geometry%7Ccolor:0xf5f5f5&style=element:labels%7Cvisibility:off&style=element:labels.icon%7Cvisibility:off&style=element:labels.text.fill%7Ccolor:0x616161&style=element:labels.text.stroke%7Ccolor:0xf5f5f5&style=feature:administrative%7Celement:geometry%7Cvisibility:off&style=feature:administrative.country%7Celement:geometry.stroke%7Ccolor:0x000000%7Cvisibility:on&style=feature:administrative.land_parcel%7Cvisibility:off&style=feature:administrative.land_parcel%7Celement:labels.text.fill%7Ccolor:0xbdbdbd&style=feature:administrative.neighborhood%7Cvisibility:off&style=feature:poi%7Cvisibility:off&style=feature:poi%7Celement:geometry%7Ccolor:0xeeeeee&style=feature:poi%7Celement:labels.text.fill%7Ccolor:0x757575&style=feature:poi.park%7Celement:geometry%7Ccolor:0xe5e5e5&style=feature:poi.park%7Celement:labels.text.fill%7Ccolor:0x9e9e9e&style=feature:road%7Cvisibility:off&style=feature:road%7Celement:geometry%7Ccolor:0xffffff&style=feature:road%7Celement:labels.icon%7Cvisibility:off&style=feature:road.arterial%7Celement:labels.text.fill%7Ccolor:0x757575&style=feature:road.highway%7Celement:geometry%7Ccolor:0xdadada&style=feature:road.highway%7Celement:labels.text.fill%7Ccolor:0x616161&style=feature:road.local%7Celement:labels.text.fill%7Ccolor:0x9e9e9e&style=feature:transit%7Cvisibility:off&style=feature:transit.line%7Celement:geometry%7Ccolor:0xe5e5e5&style=feature:transit.station%7Celement:geometry%7Ccolor:0xeeeeee&style=feature:water%7Celement:geometry%7Ccolor:0xc9c9c9&style=feature:water%7Celement:labels.text.fill%7Ccolor:0x9e9e9e&size=480x360"
+c(medianlong, medianlat)
+
+map <- get_googlemap(center=c(102,4), zoom = 7, scale = 1, style = s)
+m <- ggmap(map)
+```
+
+#map of sampling locations
+```{r}
+sample_local_plot<- m +
+ geom_point(data = OA_merged, aes(x = long, y = lat), fill=pal[2], color="black", alpha = 0.2, size=3, shape=21) +
+  xlab("Longitude") +
+  ylab("Latitude") +
+  xlim(100.5, 103.5) +
+  ylim(2, 6.5) +
+  theme_bw(13); sample_local_plot
+```
+
+#map of current urbanicity
+```{r} 
+Current_urb_by_village<- OA_merged %>%
+  group_by(village_id) %>%
+  summarize(
+    mean_lat= mean(lat),
+    mean_long=mean(long),
+    mean_urb = mean(urb_score, na.rm=T), 
+    count = n() )
+
+Current_urb_by_village<-subset(Current_urb_by_village,count>9)
+
+current_urb_plot<- m +
+ geom_point(data = Current_urb_by_village, aes(x = mean_long, y = mean_lat, fill=mean_urb, size=count), color="black", alpha = 0.8, shape=21) +
+  labs(x="Longitude", y="Latitude", size="Sample \n  size", fill="    Adult \n urbanicity \n    score") +
+   scale_fill_gradient(low = "#5CB9F4", high = pal[3]) +  
+  xlim(100.5, 103.5) +
+  ylim(2, 6.5) +
+  theme_bw(13); current_urb_plot
+```
+
+
+#Early life urbanicity by birth year
+```{r}
+#Make color scale based on entire sample
+OA_village_level <- OA_merged %>%
+  group_by(village_id) %>%
+  summarise(
+    lat = mean(lat, na.rm = TRUE),
+    long = mean(long, na.rm = TRUE),
+    avg_Early_urban_PC1 = mean(Early_urban_PC1, na.rm = TRUE),
+    avg_Early_urban_PC2 = mean(Early_urban_PC2, na.rm = TRUE),
+    avg_urb_score = mean(urb_score, na.rm = TRUE),
+    count = n()  # Count the number of rows in each group
+  )
+
+#find min and max for the whole dataset:
+min(OA_village_level$avg_Early_urban_PC1, na.rm=T) #-2.4
+max(OA_village_level$avg_Early_urban_PC1, na.rm=T) #3.96
+
+OA_merged$birth_year <- year(OA_merged$date_of_birth)
+OA_village_level_old <- OA_merged %>%
+  filter(birth_year <= 1975) %>%
+  group_by(village_id) %>%
+  summarise(
+    lat = mean(lat, na.rm = TRUE),
+    long = mean(long, na.rm = TRUE),
+    avg_Early_urban_PC1 = mean(Early_urban_PC1, na.rm = TRUE),
+    avg_Early_urban_PC2 = mean(Early_urban_PC2, na.rm = TRUE),
+    avg_urb_score = mean(urb_score, na.rm = TRUE),
+    count = n()  # Count the number of rows in each group
+  )
+OA_village_level_old<-subset(OA_village_level_old,!is.na(avg_Early_urban_PC1))
+
+
+PC1_plot_1975 <- m +
+  geom_point(data = OA_village_level_old, aes(x = long, y = lat, fill = avg_Early_urban_PC1, size = count), alpha = 0.8, shape=21, color="black") +
+  scale_fill_gradient(low = "#5CB9F4", high = pal[3], 
+                       name = "Early life PC1", 
+                       limits= c(-2.5, 6.8),
+                       breaks = c(-1.8, 5.8),
+                       labels = c("More traditional", "More urban")) +  # Match labels to breaks
+  scale_size_continuous(range = c(2,5), name = "Count") +  # Larger circles
+  xlab("Longitude") +
+  ylab("Latitude") +
+  xlim(100.5, 104) +
+  ylim(2, 6.5) +
+  theme_bw(13) +
+  ggtitle("Born before 1975") +
+  theme(legend.position = "right", plot.title=element_text(hjust=0.5)); PC1_plot_1975
+
+ggsave("EarlyLifePC1_map_1975.pdf", PC1_plot_1975)
+
+
+#after 2000
+OA_village_level_young <- OA_merged %>%
+  filter(birth_year >= 2000) %>%
+  group_by(village_id) %>%
+  summarise(
+    lat = mean(lat, na.rm = TRUE),
+    long = mean(long, na.rm = TRUE),
+    avg_Early_urban_PC1 = mean(Early_urban_PC1, na.rm = TRUE),
+    avg_Early_urban_PC2 = mean(Early_urban_PC2, na.rm = TRUE),
+    avg_urb_score = mean(urb_score, na.rm = TRUE),
+    count = n()  # Count the number of rows in each group
+  )
+OA_village_level_young<-subset(OA_village_level_young,!is.na(avg_Early_urban_PC1))
+
+PC1_plot_2000 <- m +
+  geom_point(data = OA_village_level_young, aes(x = long, y = lat, fill = avg_Early_urban_PC1, size = count), alpha = 0.8, shape=21, color="black") +
+  scale_fill_gradient(low = "#5CB9F4", high = pal[3], 
+                       name = "Early life PC1", 
+                       limits= c(-2.5, 6.8),
+                       breaks = c(-1.8, 5.8),    # Define breaks at the extremes of the scale
+                       labels = c("More traditional", "More urban")) +  # Match labels to breaks
+  scale_size_continuous(range = c(2,5), name = "Count") +  # Larger circles
+  xlab("Longitude") +
+  ylab("Latitude") +
+  xlim(100.5, 104) +
+  ylim(2, 6.5) +
+  theme_bw(13) +
+  ggtitle("Born after 2000") +
+  theme(legend.position = "right", plot.title=element_text(hjust=0.5)); PC1_plot_2000
+
+
+EarlyLifePC1_multimap2<-ggarrange(PC1_plot_1975, PC1_plot_2000, common.legend=T, legend="right"); EarlyLifePC1_multimap2
+```
+
+             #####################################################################################
+             ### Run the main models for early life PC1, current urbanicity & the interaction ###
+             #####################################################################################
+
+```{r} 
+# List of outcome variables - std
+Body_Height <- c("height_standing_std", "height_hip_std", "height_knee_std")
+
+Body_Press <- c("waist_circum_std", "weight_std", "BMI_std", "BRI_std", "body_fat_std", 
+                "waist_hip_std","sys_bp2_std", "dias_bp2_std")
+
+Blood_Bio <- c("total_chol_std", "ldl_std", "hdl_std", "triglyc_std")
+Binary<-c('obese','hypertension')
+
+all_outcomes<-c(Body_Height,Body_Press,Blood_Bio,Binary)
+results_pval<-matrix(nrow=length(all_outcomes),ncol=5)
+results_est<-matrix(nrow=length(all_outcomes),ncol=5)
+results_CI1<-matrix(nrow=length(all_outcomes),ncol=5)
+results_CI2<-matrix(nrow=length(all_outcomes),ncol=5)
+results_N<-matrix(nrow=length(all_outcomes),ncol=1)
+
+for (i in 1:length(c(Body_Height,Body_Press,Blood_Bio))){
+OA_merged$tmp_outcome<-OA_merged[,which(names(OA_merged) %in% all_outcomes[i])]
+x<-(lm( tmp_outcome ~ sex + age_std + urb_score_std * Early_PC1_std ,data=OA_merged))
+results_pval[i,1:5]<-summary(x)$coefficients[c(2:6),4]
+results_est[i,1:5]<-summary(x)$coefficients[c(2:6),1]
+results_CI1[i,1:5]<-confint(x)[c(2:6),1]
+results_CI2[i,1:5]<-confint(x)[c(2:6),2]
+results_N[i,1]<-summary(x)$df[2] + summary(x)$df[1]
+}
+
+for (i in 1:length(Binary)){
+OA_merged$tmp_outcome<-OA_merged[,which(names(OA_merged) %in% Binary[i])]
+x<-(glm( tmp_outcome ~ sex + age_std + urb_score_std * Early_PC1_std ,data=OA_merged,family='binomial'))
+results_pval[i+15,1:5]<-summary(x)$coefficients[c(2:6),4]
+results_est[i+15,1:5]<-summary(x)$coefficients[c(2:6),1]
+results_CI1[i+15,1:5]<-confint(x)[c(2:6),1]
+results_CI2[i+15,1:5]<-confint(x)[c(2:6),2]
+results_N[i+15,1]<-summary(x)$df[2] + summary(x)$df[1]
+}
+
+results_pval<-as.data.frame(results_pval)
+names(results_pval)<-c('sex','age','urb_score','early_PC1','int')
+results_est<-as.data.frame(results_est)
+names(results_est)<-c('sex','age','urb_score','early_PC1','int')
+results_N<-as.data.frame(results_N)
+results_est$outcome<-all_outcomes
+results_pval$outcome<-all_outcomes
+results_N$outcome<-all_outcomes
+```
+
+
+#export model results
+```{r}
+estimates<-pivot_longer(data=results_est, cols=1:5, names_to= "test", values_to="estimate")
+pvalues<- pivot_longer(data=results_pval, cols=1:5, names_to= "test", values_to="pvalue")
+
+merged<- merge(estimates, pvalues)
+merged$FDR<- p.adjust(merged$pvalue,method='BH')
+merged2<-merge(merged, results_N)
+colnames(merged2)<- c("outcome", "predictor", "estimate", "pvalue", "FDR", "nobs")
+
+merged2$outcome <- recode(merged2$outcome,
+  height_standing_std = "Standing height",
+  height_hip_std = "Hip height",
+  height_knee_std = "Knee height",
+  waist_circum_std = "Waist circumference",
+  weight_std = "Body weight",
+  BMI_std = "BMI",
+  BRI_std = "BRI",
+  body_fat_std = "Body fat percentage",
+  waist_hip_std = "Waist to hip ratio",
+  sys_bp2_std = "Systolic BP",
+  dias_bp2_std = "Diastolic BP",
+  total_chol_std = "Total cholesterol",
+  ldl_std = "LDL",
+  hdl_std = "HDL",
+  triglyc_std = "Triglycerides"
+)
+
+merged2$predictor <- recode(merged2$predictor,
+  early_PC1 = "early life PC1",
+  int = "interaction",
+  urb_score = "current urbanicity")
+
+merged2$significant<-'ns'
+merged2$significant[which(merged2$pvalue<0.05)]<-'p<0.05'
+merged2$significant[which(merged2$FDR<0.1)]<-'FDR<0.1'
+```
+
+
+```{r} 
+# run some additional models for BP
+OA_merged$ethnicity_negrito<-ifelse(OA_merged$ethnicity2=='Semang',1,0)
+OA_merged$tobacco2<-ifelse(OA_merged$tobacco=='never',0,1)
+OA_merged$tobacco_leaf2<-ifelse(OA_merged$tobacco_leaf=='never',0,1)
+OA_merged$betel2<-ifelse(OA_merged$betel=='never',0,1)
+
+summary(lm( sys_bp2_std ~ sex + age_std + urb_score_std * Early_PC1_std +tobacco2 +tobacco_leaf2 ,data=OA_merged))
+summary(lm( dias_bp2_std ~ sex + age_std + urb_score_std * Early_PC1_std +tobacco2 +tobacco_leaf2 ,data=OA_merged))
+
+```
+
+### plot an example: Body fat
+```{r} 
+OA_merged$early_PC_split<-ifelse(OA_merged$Early_PC1_std<0,'rural','urban')
+tmp<-subset(OA_merged,!is.na(early_PC_split) )
+
+data_summary <- function(x) {
+   m <- mean(x)
+   ymin <- m-sd(x)
+   ymax <- m+sd(x)
+   return(c(y=m,ymin=ymin,ymax=ymax))
+}
+
+Body_fat_EL_sexstrat<-ggplot(tmp, aes(x=sex,y=body_fat,fill=early_PC_split)) + 
+  geom_violin()+ stat_summary(fun.data=data_summary,position=position_dodge(0.9))+
+  theme_bw(12) + 
+  theme(legend.position="bottom", legend.title = element_text(size = 12),
+    legend.text = element_text(size = 8), axis.text=element_text(color="black")) + 
+  scale_color_manual(values=pal[1:2], labels=c("rural" = "rural \n(PC1 < 0)", "urban"= "urban \n(PC1 > 0)")) +
+  guides(fill = guide_legend(title = "Early life urbanicity")) +
+  scale_fill_manual(values=c("gray70", "white")) +
+  xlab("") +
+  ylab("Body fat percentage");Body_fat_EL_sexstrat
+```
+
+
+### plot an example: Knee height
+```{r} 
+OA_merged$early_PC_split<-ifelse(OA_merged$Early_PC1_std<0,'rural','urban')
+tmp<-subset(OA_merged,!is.na(early_PC_split) )
+
+data_summary <- function(x) {
+   m <- mean(x)
+   ymin <- m-sd(x)
+   ymax <- m+sd(x)
+   return(c(y=m,ymin=ymin,ymax=ymax))
+}
+
+Knee_height_EL_sexstrat<-ggplot(tmp, aes(x=sex,y=height_knee,fill=early_PC_split)) + 
+  geom_violin()+ 
+  stat_summary(fun.data=data_summary,position=position_dodge(0.9))+
+  theme_bw(12) + 
+  theme(legend.position="bottom", legend.title = element_text(size = 12),
+    legend.text = element_text(size = 8), axis.text=element_text(color="black")) + 
+  scale_color_manual(values=pal[1:2], labels=c("rural" = "rural \n(PC1 < 0)", "urban"= "urban \n(PC1 > 0)")) +
+  guides(fill = guide_legend(title = "Early life urbanicity")) +
+  scale_fill_manual(values=c("gray70", "white")) +
+  xlab("") +
+  ylab("Knee height");Knee_height_EL_sexstrat
+```
+
+### Make the forest plots 
+```{r} 
+##List of outcome variables - std
+Body_Height <- c("height_standing_std", "height_hip_std", "height_knee_std")
+
+Body_Press <- c("waist_circum_std", "weight_std", "BMI_std", "BRI_std", "body_fat_std", 
+                "waist_hip_std","sys_bp2_std", "dias_bp2_std")
+
+Blood_Bio <- c("total_chol_std", "ldl_std", "hdl_std", "triglyc_std")
+all_outcomes <- c(Body_Height, Body_Press, Blood_Bio)
+
+######
+# early life
+######
+
+tmp<-as.data.frame(cbind(results_est[1:15,4],results_CI1[1:15,4],results_CI2[1:15,4],results_pval[1:15,4],p.adjust(results_pval[1:15,4],method='BH')))
+tmp$outcome2<-all_outcomes
+tmp$outcome<-factor(tmp$outcome2, levels=rev(all_outcomes), labels=rev(c("Standing height","Hip height","Knee height","Waist circumference", "Body weight", "BMI","BRI","Body fat percentage",  "Waist to hip ratio", "Systolic BP", "Diastolic BP", "Total cholesterol", "LDL", "HDL",  "Triglycerides")))
+
+tmp$significant<-'ns'
+tmp$significant[which(tmp$V4<0.05)]<-'p<0.05'
+tmp$significant[which(tmp$V5<0.1)]<-'FDR<0.1'
+tmp$significant <- factor(tmp$significant, levels = c("ns", "p<0.05", "FDR<0.1"))
+
+dotCOLS = c("#89B9E1",'lightgrey',"#F8C17A")
+barCOLS = c(pal[1],'darkgrey',pal[2])
+
+EL_PC1_forest<-ggplot(tmp, aes(x=outcome, y=V1, ymin=V2, ymax=V3,col=significant,fill=significant)) + 
+  geom_linerange(size=1,position=position_dodge(width = 0.5), show.legend=TRUE) +
+  geom_hline(yintercept=0, lty=2) +
+  geom_point(size=3, shape=21, colour="white", stroke = 0.5,position=position_dodge(width = 0.5), show.legend=TRUE) +
+  ylim(-0.2, 0.41)+
+  xlab("")+
+  scale_fill_manual(values=c("ns"=barCOLS[2], "p<0.05"= barCOLS[3], "FDR<0.1"=barCOLS[1]), drop=F)+
+  scale_color_manual(values=c("ns"=dotCOLS[2], "p<0.05"= dotCOLS[3], "FDR<0.1"=dotCOLS[1]), drop=F)+
+  coord_flip() +
+  theme_bw(12) + 
+  theme(plot.title=element_text(hjust=0.5), legend.title=element_blank(), axis.text=element_text(color="black")) +
+  labs(y='Effect size', title='Early life PC1');EL_PC1_forest
+
+######
+# current urbanicity
+######
+
+tmp<-as.data.frame(cbind(results_est[1:15,3],results_CI1[1:15,3],results_CI2[1:15,3],results_pval[1:15,3],p.adjust(results_pval[1:15,3],method='BH')))
+tmp$outcome2<-all_outcomes
+tmp$outcome<-factor(tmp$outcome2, levels=rev(all_outcomes), labels=rev(c("Standing height","Hip height","Knee height","Waist circumference", "Body weight", "BMI","BRI","Body fat percentage",  "Waist to hip ratio", "Systolic BP", "Diastolic BP", "Total cholesterol", "LDL", "HDL",  "Triglycerides")))
+tmp$significant<-'ns'
+tmp$significant[which(tmp$V4<0.05)]<-'p<0.05'
+tmp$significant[which(tmp$V5<0.1)]<-'FDR<0.1'
+tmp$significant <- factor(tmp$significant, levels = c("ns", "p<0.05", "FDR<0.1"))
+
+dotCOLS = c("#89B9E1",'lightgrey',"#F8C17A")
+barCOLS = c(pal[1],'darkgrey',pal[2])
+
+Current_PC1_forest<-ggplot(tmp, aes(x=outcome, y=V1, ymin=V2, ymax=V3,col=significant,fill=significant)) + 
+  geom_linerange(size=1,position=position_dodge(width = 0.5), show.legend=TRUE) +
+  geom_hline(yintercept=0, lty=2) +
+  geom_point(size=3, shape=21, colour="white", stroke = 0.5,position=position_dodge(width = 0.5), show.legend=TRUE) +
+  ylim(-0.2, 0.41)+
+  xlab("")+
+  scale_fill_manual(values=c("ns"=barCOLS[2], "p<0.05"= barCOLS[3], "FDR<0.1"=barCOLS[1]), drop=F)+
+  scale_color_manual(values=c("ns"=dotCOLS[2], "p<0.05"= dotCOLS[3], "FDR<0.1"=dotCOLS[1]), drop=F)+
+  coord_flip() +
+  theme_bw(12) + 
+  theme(axis.text.y=element_blank(), plot.title=element_text(hjust=0.5), legend.title=element_blank())+
+  labs(y='Effect size', title='Current urbanicity');Current_PC1_forest
+
+######
+# interaction effect
+######
+tmp<-as.data.frame(cbind(results_est[1:15,5],results_CI1[1:15,5],results_CI2[1:15,5],results_pval[1:15,5],p.adjust(results_pval[1:15,5],method='BH')))
+tmp$outcome2<-all_outcomes
+tmp$outcome<-factor(tmp$outcome2, levels=rev(all_outcomes), labels=rev(c("Standing height","Hip height","Knee height","Waist circumference", "Body weight", "BMI","BRI","Body fat percentage",  "Waist to hip ratio", "Systolic BP", "Diastolic BP", "Total cholesterol", "LDL", "HDL",  "Triglycerides")))
+tmp$significant<-'ns'
+tmp$significant[which(tmp$V4<0.05)]<-'p<0.05'
+tmp$significant[which(tmp$V5<0.1)]<-'FDR<0.1'
+tmp$significant <- factor(tmp$significant, levels = c("ns", "p<0.05", "FDR<0.1"))
+
+dotCOLS = c("#89B9E1",'lightgrey',"#F8C17A")
+barCOLS = c(pal[1],'darkgrey',pal[2])
+
+Int_PC1_forest<-ggplot(tmp, aes(x=outcome, y=V1, ymin=V2, ymax=V3,col=significant,fill=significant)) + 
+  geom_linerange(size=1,position=position_dodge(width = 0.5), show.legend=TRUE) +
+  geom_hline(yintercept=0, lty=2) +
+  geom_point(size=3, shape=21, colour="white", stroke = 0.5,position=position_dodge(width = 0.5), show.legend=TRUE) +
+  ylim(-0.2, 0.41)+
+  xlab("")+
+  scale_fill_manual(values=c("ns"=barCOLS[2], "p<0.05"= barCOLS[3], "FDR<0.1"=barCOLS[1]), drop=F)+
+  scale_color_manual(values=c("ns"=dotCOLS[2], "p<0.05"= dotCOLS[3], "FDR<0.1"=dotCOLS[1]), drop=F)+
+  coord_flip() +
+  theme_bw(12) + 
+  theme(axis.text.y=element_blank(), plot.title=element_text(hjust=0.5), legend.title=element_blank(), axis.text=element_text(color="black"))+
+  labs(y='Effect size', title='Interaction');Int_PC1_forest
+```
+
+         ############################################
+         ######### Run sex stratefied model #########
+         ############################################
+         
+```{r} 
+all_outcomes <- c(Body_Height, Body_Press, Blood_Bio)
+results_pval<-matrix(nrow=length(all_outcomes),ncol=10)
+results_est<-matrix(nrow=length(all_outcomes),ncol=12)
+results_CI1<-matrix(nrow=length(all_outcomes),ncol=8)
+results_CI2<-matrix(nrow=length(all_outcomes),ncol=8)
+
+OA_merged_F<-subset(OA_merged,sex=='Female')
+OA_merged_M<-subset(OA_merged,sex=='Male')
+
+for (i in 1:length(all_outcomes)){
+OA_merged_F$tmp_outcome<-OA_merged_F[,which(names(OA_merged_F) %in% all_outcomes[i])]
+x<-(lm( tmp_outcome ~ age_std + urb_score_std * Early_PC1_std ,data=OA_merged_F))
+results_pval[i,1:4]<-summary(x)$coefficients[2:5,4]
+results_est[i,1:4]<-summary(x)$coefficients[2:5,1]
+results_CI1[i,1:4]<-confint(x)[2:5,1]
+results_CI2[i,1:4]<-confint(x)[2:5,2]
+results_est[i,5]<-nobs(x)
+results_est[i,6]<-"female"
+results_pval[i,5]<-"female"
+}
+
+for (i in 1:length(all_outcomes)){
+OA_merged_M$tmp_outcome<-OA_merged_M[,which(names(OA_merged_M) %in% all_outcomes[i])]
+x<-(lm( tmp_outcome ~ age_std + urb_score_std * Early_PC1_std ,data=OA_merged_M))
+results_pval[i,6:9]<-summary(x)$coefficients[2:5,4]
+results_est[i,7:10]<-summary(x)$coefficients[2:5,1]
+results_CI1[i,5:8]<-confint(x)[2:5,1]
+results_CI2[i,5:8]<-confint(x)[2:5,2]
+results_est[i,11]<-nobs(x)
+results_est[i,12]<-"male"
+results_pval[i,10]<-"male"
+}
+
+colnames(results_est)[7:12] <- colnames(results_est)[1:6]
+results_est<-as.data.frame(rbind(results_est[,1:6], results_est[,7:12]))
+colnames(results_est)<-c('age','urb_score','early_PC1','int', 'nobs', 'sex')
+
+colnames(results_pval)[6:10] <- colnames(results_pval)[1:5]
+results_pval<-as.data.frame(rbind(results_pval[,1:5], results_pval[,6:10]))
+colnames(results_pval)<-c('age','urb_score','early_PC1','int', 'sex')
+results_est$outcome<-c(all_outcomes, all_outcomes)
+results_pval$outcome<-c(all_outcomes, all_outcomes)
+```
+
+#export model results
+```{r}
+estimates<-pivot_longer(data=results_est, cols=1:4, names_to= "predictor", values_to="estimate")
+pvalues<- pivot_longer(data=results_pval, cols=1:4, names_to= "predictor", values_to="pvalue")
+
+merged<- merge(estimates, pvalues)
+merged$FDR<- p.adjust(merged$pvalue,method='BH')
+
+merged$outcome <- recode(merged$outcome,
+  height_standing_std = "Standing height",
+  height_hip_std = "Hip height",
+  height_knee_std = "Knee height",
+  waist_circum_std = "Waist circumference",
+  weight_std = "Body weight",
+  BMI_std = "BMI",
+  BRI_std = "BRI",
+  body_fat_std = "Body fat percentage",
+  waist_hip_std = "Waist to hip ratio",
+  sys_bp2_std = "Systolic BP",
+  dias_bp2_std = "Diastolic BP",
+  total_chol_std = "Total cholesterol",
+  ldl_std = "LDL",
+  hdl_std = "HDL",
+  triglyc_std = "Triglycerides"
+)
+
+merged$predictor <- recode(merged$predictor,
+  early_PC1 = "early life PC1",
+  int = "interaction",
+  urb_score = "current urbanicity")
+
+merged$significant<-'ns'
+merged$significant[which(merged$pvalue<0.05)]<-'p<0.05'
+merged$significant[which(merged$FDR<0.1)]<-'FDR<0.1'
+```
+
+
+#Make forest plot of early life effects
+```{r} 
+all_outcomes <- c(Body_Height, Body_Press, Blood_Bio)
+results_pval<-matrix(nrow=length(all_outcomes),ncol=8)
+results_est<-matrix(nrow=length(all_outcomes),ncol=8)
+results_CI1<-matrix(nrow=length(all_outcomes),ncol=8)
+results_CI2<-matrix(nrow=length(all_outcomes),ncol=8)
+
+OA_merged_F<-subset(OA_merged,sex=='Female')
+OA_merged_M<-subset(OA_merged,sex=='Male')
+
+for (i in 1:length(all_outcomes)){
+OA_merged_F$tmp_outcome<-OA_merged_F[,which(names(OA_merged_F) %in% all_outcomes[i])]
+x<-(lm(tmp_outcome ~ age_std + urb_score_std * Early_PC1_std ,data=OA_merged_F))
+results_pval[i,1:4]<-summary(x)$coefficients[2:5,4]
+results_est[i,1:4]<-summary(x)$coefficients[2:5,1]
+results_CI1[i,1:4]<-confint(x)[2:5,1]
+results_CI2[i,1:4]<-confint(x)[2:5,2]
+}
+
+for (i in 1:length(all_outcomes)){
+OA_merged_M$tmp_outcome<-OA_merged_M[,which(names(OA_merged_M) %in% all_outcomes[i])]
+x<-(lm( tmp_outcome ~ age_std + urb_score_std * Early_PC1_std ,data=OA_merged_M))
+results_pval[i,5:8]<-summary(x)$coefficients[2:5,4]
+results_est[i,5:8]<-summary(x)$coefficients[2:5,1]
+results_CI1[i,5:8]<-confint(x)[2:5,1]
+results_CI2[i,5:8]<-confint(x)[2:5,2]
+}
+
+
+
+tmpF<-as.data.frame(cbind(results_est[,3],results_CI1[,3],results_CI2[,3],results_pval[,3],p.adjust(results_pval[,3],method='BH')))
+tmpF$outcome<-all_outcomes
+tmpF$significant<-'ns'
+tmpF$significant[which(tmpF$V4<0.05)]<-'p<0.05'
+tmpF$significant[which(tmpF$V5<0.1)]<-'FDR<0.1'
+
+tmpM<-as.data.frame(cbind(results_est[,7],results_CI1[,7],results_CI2[,7],results_pval[,7],p.adjust(results_pval[,7],method='BH')))
+tmpM$outcome<-all_outcomes
+tmpM$significant<-'ns'
+tmpM$significant[which(tmpM$V4<0.05)]<-'p<0.05'
+tmpM$significant[which(tmpM$V5<0.1)]<-'FDR<0.1'
+
+tmpM$sex<-'male'
+tmpF$sex<-'female'
+
+tmpSPLIT<-rbind(tmpM,tmpF)
+
+tmpSPLIT$outcome_format<-factor(tmpSPLIT$outcome, levels=rev(all_outcomes), labels=rev(c("Standing height","Hip height","Knee height","Waist circumference", "Body weight", "BMI","BRI","Body fat percentage",  "Waist to hip ratio", "Systolic BP", "Diastolic BP", "Total cholesterol", "LDL", "HDL",  "Triglycerides")))
+
+tmpSPLIT$significant<-factor(tmpSPLIT$significant, levels=c("FDR<0.1", "p<0.05", "ns"))
+
+dotCOLS = c("#89B9E1","#F8C17A", 'lightgrey')
+barCOLS = c(pal[1],pal[2],'darkgrey')
+
+EL_sexfacet<- ggplot(tmpSPLIT, aes(x=outcome_format, y=V1, ymin=V2, ymax=V3,col=significant,fill=significant)) + 
+#specify position here
+  geom_linerange(size=1,position=position_dodge(width = 0.5)) +
+  geom_hline(yintercept=0, lty=2) +
+#specify position here too
+  geom_point(size=3, shape=21, colour="white", stroke = 0.5,position=position_dodge(width = 0.5)) +
+  scale_fill_manual(values=barCOLS)+
+  scale_color_manual(values=dotCOLS)+
+  coord_flip() +
+  theme_bw(12) + 
+  theme(plot.title=element_text(hjust=0.5), strip.text=element_text(size=12), axis.text=element_text(color="black"), legend.position="bottom") + 
+  labs(y='Effect size', x= "", title='Early life PC1') +facet_wrap(~sex); EL_sexfacet
+```
+
+          ##########################################################################
+          ############### Run the regression test for DC versus PAR ################
+          ##########################################################################
+          
+```{r} 
+# List of outcome variables - std
+OA_merged$ldl_std_rev<-OA_merged$ldl_std * -1
+
+Body_Height <- c("height_standing_std", "height_hip_std", "height_knee_std")
+
+Body_Press <- c("waist_circum_std", "weight_std", "BMI_std", "BRI_std", "body_fat_std", 
+                "waist_hip_std","sys_bp2_std", "dias_bp2_std")
+
+Blood_Bio <- c("total_chol_std", "ldl_std_rev", "hdl_std", "triglyc_std")
+
+all_outcomes<-c(Body_Press,Blood_Bio)
+
+regression_test1<-matrix(nrow=length(all_outcomes),ncol=7)
+# e0 = early life (early)
+# ed = difference between current and early (adult - early)
+
+# Generate quadratic terms
+# higher = rural/better 'quality'
+OA_merged$e0 <- -1*(OA_merged$Early_PC1_std)
+OA_merged$ed <- abs(-1*OA_merged$urb_score_std - OA_merged$e0)
+OA_merged$e02 <- OA_merged$e0^2
+OA_merged$ed2 <- OA_merged$ed^2
+OA_merged$e0d <- OA_merged$e0 * OA_merged$ed
+
+for (i in 1:length(all_outcomes)){
+OA_merged$tmp_outcome<-OA_merged[,which(names(OA_merged) %in% all_outcomes[i])]*-1
+# Basic quadratic regression
+model <- lm(tmp_outcome ~ e0 + ed + e02 + ed2 + e0d + age_std + sex, data = OA_merged)
+
+# Test for DC and PAR at mean of data
+# Gather means of each input variable
+tmp<-subset(OA_merged,!is.na(ed) & !is.na(tmp_outcome) )
+m0 <- mean(tmp$e0,na.rm=T)
+md <- mean(tmp$ed,na.rm=T)
+
+# Test for DC 
+dc_est <- as.numeric(coef(model)[2]) + (2 * as.numeric(coef(model)[4]) * m0) + (as.numeric(coef(model)[6]) * md)
+dc_n<-nobs(model)
+pval_dc <- as.numeric(nlWaldtest(model,c(paste("b[2] + 2*b[4]*",m0," + b[6]*",md))) [4])
+
+regression_test1[i,1]<- pval_dc
+regression_test1[i,2]<- dc_est
+regression_test1[i,7]<-dc_n
+
+# Test for PAR 
+# similar result using ed for the p-value
+par_est <- as.numeric(coef(model)[3]) + (2 * as.numeric(coef(model)[5]) * md) + (as.numeric(coef(model)[6]) * m0)
+pval_par <- as.numeric(nlWaldtest(model,c(paste("b[3] + 2*b[5]*",md," + b[6]*",m0))) [4])
+
+regression_test1[i,4]<- pval_par
+regression_test1[i,5]<- par_est
+
+}
+regression_test1[,3]<-p.adjust(regression_test1[,1],method='BH')
+regression_test1[,6]<-p.adjust(regression_test1[,4],method='BH')
+
+regression_test2<-as.data.frame(rbind(regression_test1[,c(1:3,7)],regression_test1[,4:7]))
+regression_test2$outcome<-c(all_outcomes,all_outcomes)
+regression_test2$test<-c(rep('DC',length(all_outcomes)),rep('PAR',length(all_outcomes)))
+regression_test2$sig<-'ns'
+regression_test2$sig[which(regression_test2$V1<0.05 & regression_test2$V2>0 & regression_test2$test=='DC')]<-'p<0.05'
+regression_test2$sig[which(regression_test2$V1<0.05 & regression_test2$V2<0 & regression_test2$test=='PAR')]<-'p<0.05'
+regression_test2$sig[which(regression_test2$V3<0.1 & regression_test2$V2>0 & regression_test2$test=='DC')]<-'FDR<0.1'
+regression_test2$sig[which(regression_test2$V3<0.1 & regression_test2$V2<0 & regression_test2$test=='PAR')]<-'FDR<0.1'
+regression_test2$outcome_format<-factor(regression_test2$outcome, levels=rev(c("weight_std", "body_fat_std", "BMI_std", "waist_circum_std", "waist_hip_std", "BRI_std", "sys_bp2_std", "dias_bp2_std", "total_chol_std", "hdl_std", "ldl_std_rev",  "triglyc_std", "glucose_std")), labels=rev(c("Body weight", "Body fat percentage", "BMI", "Waist circumference", "Waist to hip ratio", "BRI", "Systolic BP", "Diastolic BP", "Total cholesterol", "HDL", "LDL",  "Triglycerides", "Glucose")))
+regression_test2$sig<-factor(regression_test2$sig, levels=c("ns", "p<0.05", "FDR<0.1"))
+colnames(regression_test2) <- c("pvalue", "estimate", "FDR", "sample_size", "outcome", "test", "sig", "outcome_format")
+
+DCvPAR_dotplot<-ggplot(regression_test2, aes(x=outcome_format, y=V2,color=sig)) +
+  geom_segment(aes(x=outcome_format, xend=outcome_format, y=0, yend=V2))  +
+  geom_point() +
+  theme_bw(13) +
+  theme(strip.text.x=element_text(size=14), axis.text.x=element_text(angle=45, hjust=0.5, vjust=0.5), legend.title=element_blank(), legend.position="top") +
+  coord_flip() +
+  xlab("") + ylab("Estimate") +facet_wrap(~test) +
+  scale_color_manual(values=c("FDR<0.1"=pal[1], "p<0.05"=pal[2], "ns"="darkgray")); DCvPAR_dotplot
+```
+
+### Plot two examples
+```{r} 
+# example
+A<-ggplot(OA_merged, aes(x=e0, y= body_fat)) +
+  geom_text(x=0.5, y=55, size=4.5, label=expression(paste("p = 3.2 x ", 10^-14))) +
+  geom_point(size=1) + stat_smooth(method='lm', color=pal[1])+
+  theme_bw(13) + 
+  theme(plot.title=element_text(size=14, hjust=0.5)) +
+  xlab('') +
+  ylab("Body fat percentage") +
+  ggtitle("");A
+
+
+B<-ggplot(OA_merged, aes(x= (-1 * urb_score_std) - e0, y=body_fat)) +
+  geom_point(size=1) + 
+  stat_smooth(method='lm', formula = y ~ x + I(x^2), color="darkgray")+
+  theme_bw(13) + 
+  theme(plot.title=element_text(size=14, hjust=0.5))+
+  xlab('') + 
+  geom_text(x=3, y=55, size=4.5, label="p = 0.98") +
+  ylab("Body fat percentage") +
+  ggtitle(""); B
+```
