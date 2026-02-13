@@ -23,6 +23,7 @@ library(scales)
 library(preprocessCore)
 library(nlWaldTest)
 library(nationalparkcolors)
+library(nlWaldTest)
 pal <- park_palette("Badlands")
 ```
 
@@ -876,8 +877,8 @@ regression_test2$outcome_format<-factor(regression_test2$outcome, levels=rev(c("
 regression_test2$sig<-factor(regression_test2$sig, levels=c("ns", "p<0.05", "FDR<0.1"))
 colnames(regression_test2) <- c("pvalue", "estimate", "FDR", "sample_size", "outcome", "test", "sig", "outcome_format")
 
-DCvPAR_dotplot<-ggplot(regression_test2, aes(x=outcome_format, y=V2,color=sig)) +
-  geom_segment(aes(x=outcome_format, xend=outcome_format, y=0, yend=V2))  +
+DCvPAR_dotplot<-ggplot(regression_test2, aes(x=outcome_format, y=estimate,color=sig)) +
+  geom_segment(aes(x=outcome_format, xend=outcome_format, y=0, yend=estimate))  +
   geom_point() +
   theme_bw(13) +
   theme(strip.text.x=element_text(size=14), axis.text.x=element_text(angle=45, hjust=0.5, vjust=0.5), legend.title=element_blank(), legend.position="top") +
@@ -890,22 +891,60 @@ DCvPAR_dotplot<-ggplot(regression_test2, aes(x=outcome_format, y=V2,color=sig)) 
 ```{r} 
 # example
 A<-ggplot(OA_merged, aes(x=e0, y= body_fat)) +
-  geom_text(x=0.5, y=55, size=4.5, label=expression(paste("p = 3.2 x ", 10^-14))) +
-  geom_point(size=1) + stat_smooth(method='lm', color=pal[1])+
+  geom_text(x=0.5, y=55, size=3, label=expression(paste("p = 3.2 x ", 10^-14))) +
+  geom_point(size=0.8) + stat_smooth(method='lm', color=pal[1])+
   theme_bw(13) + 
   theme(plot.title=element_text(size=14, hjust=0.5)) +
   xlab('') +
   ylab("Body fat percentage") +
   ggtitle("");A
 
+ggsave("bodyfat_DC.pdf", A, width=3.5, height=3.5)
+
 
 B<-ggplot(OA_merged, aes(x= (-1 * urb_score_std) - e0, y=body_fat)) +
-  geom_point(size=1) + 
+  geom_point(size=0.8) + 
   stat_smooth(method='lm', formula = y ~ x + I(x^2), color="darkgray")+
   theme_bw(13) + 
   theme(plot.title=element_text(size=14, hjust=0.5))+
   xlab('') + 
-  geom_text(x=3, y=55, size=4.5, label="p = 0.98") +
+  geom_text(x=3, y=55, size=3, label="p = 0.98") +
   ylab("Body fat percentage") +
   ggtitle(""); B
+
+ggsave("bodyfat_PAR.pdf", B, width=3.5, height=3.5)
 ```
+
+
+
+#list of columns to keep
+```{r}
+# List of outcome variables - non std
+Body_Height <- c("height_standing", "height_hip", "height_knee")
+
+Body_Press <- c("waist_circum", "weight", "BMI", "BRI", "body_fat", 
+                "waist_hip","sys_bp2", "dias_bp2")
+
+Blood_Bio <- c("total_chol", "ldl", "hdl",  "triglyc")
+Binary<-c('obese','hypertension')
+
+# List of outcome variables - std
+Body_Height_std <- c("height_standing_std", "height_hip_std", "height_knee_std")
+
+Body_Press_std <- c("waist_circum_std", "weight_std", "BMI_std", "BRI_std", "body_fat_std", 
+                "waist_hip_std","sys_bp2_std", "dias_bp2_std")
+
+Blood_Bio_std <- c("total_chol_std", "ldl_std", "hdl_std", "triglyc_std")
+
+#Other modeling variables
+
+other<-c("sex", "age_std", "urb_score_std", "Early_PC1_std")
+
+all_outcomes<-c("id", other,Body_Height,Body_Press,Blood_Bio,Binary,Body_Height_std,Body_Press_std,Blood_Bio_std)
+
+OA_merged_filtered<-OA_merged %>%
+  mutate(id = c(1:nrow(OA_merged))) %>%
+  dplyr::select(all_outcomes)
+write.csv(OA_merged_filtered, "OA_data_for_peer_review.csv", row.names = F)
+```
+
