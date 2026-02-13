@@ -23,7 +23,7 @@ renv::restore()
 
 #load data
 ```{r}
-OA_data<-read.delim("27Mar25_OA_merged.txt")
+OA_data<-read.delim("Orang_Asli_data_file_for_Github.txt")
 ```
 
 
@@ -231,8 +231,8 @@ OA_merged<-subset(OA_merged_std,age>17)
 OA_merged$Early_PC1_std<- scale(OA_merged$Early_urban_PC1)
 
 # sanity check the cleaned variables (before standardization)
-tmp<-OA_merged[,c(Body_Height,Body_Press,Blood_Bio,'rid','sex')] %>%
-  pivot_longer(!rid & !sex, names_to = "outcome", values_to = "value")
+tmp<-OA_merged[,c(Body_Height,Body_Press,Blood_Bio,'sex')] %>%
+  pivot_longer(!sex, names_to = "outcome", values_to = "value")
 
 tmp$outcome <- recode(tmp$outcome,
   height_standing = "Standing height",
@@ -326,6 +326,7 @@ OA_village_level <- OA_merged %>%
 min(OA_village_level$avg_Early_urban_PC1, na.rm=T) #-2.4
 max(OA_village_level$avg_Early_urban_PC1, na.rm=T) #3.96
 
+OA_merged$date_of_birth <- mdy(OA_merged$date_of_birth)
 OA_merged$birth_year <- year(OA_merged$date_of_birth)
 OA_village_level_old <- OA_merged %>%
   filter(birth_year <= 1975) %>%
@@ -482,19 +483,6 @@ merged2$predictor <- recode(merged2$predictor,
 merged2$significant<-'ns'
 merged2$significant[which(merged2$pvalue<0.05)]<-'p<0.05'
 merged2$significant[which(merged2$FDR<0.1)]<-'FDR<0.1'
-```
-
-
-```{r} 
-# run some additional models for BP
-OA_merged$ethnicity_negrito<-ifelse(OA_merged$ethnicity2=='Semang',1,0)
-OA_merged$tobacco2<-ifelse(OA_merged$tobacco=='never',0,1)
-OA_merged$tobacco_leaf2<-ifelse(OA_merged$tobacco_leaf=='never',0,1)
-OA_merged$betel2<-ifelse(OA_merged$betel=='never',0,1)
-
-summary(lm( sys_bp2_std ~ sex + age_std + urb_score_std * Early_PC1_std +tobacco2 +tobacco_leaf2 ,data=OA_merged))
-summary(lm( dias_bp2_std ~ sex + age_std + urb_score_std * Early_PC1_std +tobacco2 +tobacco_leaf2 ,data=OA_merged))
-
 ```
 
 ### plot an example: Body fat

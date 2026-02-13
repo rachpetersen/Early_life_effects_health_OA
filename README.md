@@ -13,7 +13,7 @@ The analyses assess early life effects and evaluate developmental constraints an
 - **R version:** 4.5.1
 - Package versions are recorded using renv (see renv.lock)
 - A Google Maps API key (for geocoding via ggmap)
-- Access to the protected data file: `27Mar25_OA_health_data.txt`
+- Access to the protected data file hosted on Zenodo (https://zenodo.org/records/15684749): `Orang_Asli_data_file_for_Github.txt`
 
 ---
 
@@ -23,7 +23,7 @@ Place the following files in the **same working directory**:
 
 - `Early_life_effects_health_OA.Rmd`
 - `renv.lock`
-- `27Mar25_OA_health_data.txt` (protected data file)
+- `Orang_Asli_data_file_for_Github.txt` (protected data file)
 
 No additional folder structure is required. 
 
@@ -48,16 +48,19 @@ Exact session details (R version, platform, and loaded package versions) are pro
 
 ## Data Requirements
 
-The analyses require a single input file: `27Mar25_OA_health_data.txt`
+The analyses require a single input file: `Orang_Asli_data_file_for_Github.txt`
+
 All preprocessing, variable coding, transformation, statistical modelling, principal components analysis, and figure generation are performed within `Early_life_effects_health_OA.Rmd`. No additional preprocessing steps are required. Current urbanicity scores are included directly in the provided data file. The script used to generate this location-based urbanicity score is available separately at:
+
 https://github.com/mwatowich/Multi-population_lifestyle_scales/blob/main/scripts/lifestyleScale_locationAggregateUrbanicity.R
-The output of that script is what is included in `27Mar25_OA_health_data.txt`. Re-running that script is **not required** to reproduce the analyses in this repository.
+
+The output of that script is what is included in `Orang_Asli_data_file_for_Github.txt`. Re-running that script is **not required** to reproduce the analyses in this repository.
 
 ---
 
 ## Data Access
 
-The associated data are housed in the OA HeLP protected data repository and are available through restricted access. Requests for de-identified, individual-level data must include:
+The associated data are housed on Zenodo (https://zenodo.org/records/15684749) and are available through restricted access. Requests for de-identified, individual-level data must include:
 - A detailed description of research questions and proposed analyses
 - Data security and privacy procedures
 - Consideration of potential benefits to study communities
