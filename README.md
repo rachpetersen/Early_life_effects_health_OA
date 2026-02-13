@@ -13,7 +13,7 @@ The analyses assess early life effects and evaluate developmental constraints an
 - **R version:** 4.5.1
 - Package versions are recorded using renv (see renv.lock)
 - A Google Maps API key (for geocoding via ggmap)
-- Access to the protected data file hosted on Zenodo (https://zenodo.org/records/15684749): `Orang_Asli_data_file_for_Github.txt`
+- Access to the protected data file hosted on Zenodo (https://doi.org/10.5281/zenodo.15684748): `Orang_Asli_data_file_for_Github.txt`
 
 ---
 
@@ -60,7 +60,7 @@ The output of that script is what is included in `Orang_Asli_data_file_for_Githu
 
 ## Data Access
 
-The associated data are housed on Zenodo (https://zenodo.org/records/15684749) and are available through restricted access. Requests for de-identified, individual-level data must include:
+The associated data are housed on Zenodo (https://doi.org/10.5281/zenodo.15684748) and are available through restricted access. Requests for de-identified, individual-level data must include:
 - A detailed description of research questions and proposed analyses
 - Data security and privacy procedures
 - Consideration of potential benefits to study communities
